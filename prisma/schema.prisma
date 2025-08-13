@@ -1,0 +1,30 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Opportunity {
+  id                 Int      @id @default(autoincrement())
+  pair               String
+  token0             String
+  token1             String
+  dexBuy             String
+  dexSell            String
+  priceBuy           Float
+  priceSell          Float
+  amountIn           Float
+  grossProfit        Float
+  netProfit          Float
+  gasCost            Float
+  timestamp          DateTime @default(now())
+  reservesSnapshot   Json
+  simulationDetails  Json
+  safetyMarginPct    Float
+}
