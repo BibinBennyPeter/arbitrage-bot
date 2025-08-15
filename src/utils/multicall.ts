@@ -1,6 +1,8 @@
 import { Contract, JsonRpcProvider } from "ethers";
 import MulticallAbi from "../abi/MultiCall2.json" with { type: "json" };
 import { MULTICALL_ADDRESS_BY_CHAIN } from "../config/config.js";
+import { error } from "console";
+import type { Multicall2Contract } from "../types/index.js";
 
 // Ethereum (1) and Polygon (137).
 const RPC_BY_CHAIN: Record<number, string> = {
@@ -9,22 +11,26 @@ const RPC_BY_CHAIN: Record<number, string> = {
 };
 
 // Map chainId -> Multicall address.
-const MULTICALL_BY_CHAIN_ID: Record<number, string> = {
+
+const MULTICALL_ADDRESS_BY_CHAIN_ID: Record<number, string> = {
   1: MULTICALL_ADDRESS_BY_CHAIN.ethereum!,
   137: MULTICALL_ADDRESS_BY_CHAIN.polygon!,
 };
 
-export function getMulticall(
-  chainId: number,
-  provider: JsonRpcProvider
-): Contract {
-  const address = MULTICALL_ADDRESS_BY_CHAIN[chainId];
-  if (!address) {
-    throw new Error(
-      `No Multicall address configured for chainId=${chainId}. Set MULTICALL_ETHEREUM / MULTICALL_POLYGON in .env`
-    );
+export function getMulticall(chainId: number, provider: JsonRpcProvider): Multicall2Contract {
+  const address = MULTICALL_ADDRESS_BY_CHAIN_ID[chainId];
+  if (!address) throw new Error(`No Multicall address configured for chainId=${chainId}`);
+  const contract = new Contract(address, MulticallAbi as any, provider) as Multicall2Contract;
+
+  // Attach runtime helper so callers can use contract.tryAggregate(...) directly.
+  if (!contract.tryAggregate) {
+    contract.tryAggregate = async (requireSuccess: boolean, calls: { target: string; callData: string }[]) => {
+      // Use callStatic to ensure no transaction is sent
+      return contract.callStatic.tryAggregate(requireSuccess, calls);
+    };
   }
-  return new Contract(address, MulticallAbi, provider);
+
+  return contract;
 }
 
 // Basic guard to make sure config exists at runtime.
@@ -34,8 +40,3 @@ export function getProvider(chainId: number): JsonRpcProvider {
   return new JsonRpcProvider(url);
 }
 
-export function getMulticallAddress(chainId: number): string {
-  const addr = MULTICALL_BY_CHAIN_ID[chainId];
-  if (!addr) throw new Error(`No Multicall address configured for chainId=${chainId}. Set MULTICALL_ETHEREUM / MULTICALL_POLYGON in .env`);
-  return addr;
-}

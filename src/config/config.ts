@@ -1,6 +1,10 @@
 import assert from "assert";
+import dotenv from "dotenv";
+dotenv.config();
 
-export const RPC_URL = process.env.RPC_URL ?? "";
+
+export const RPC = process.env.RPC_ETHEREUM ?? process.env.RPC_POLYGON ?? process.env.RPC_BSC ?? "";
+console.log("Using RPC:", RPC);
 export const PAIR_CHUNK_SIZE = Number(process.env.PAIR_CHUNK_SIZE ?? 30);
 
 export const MULTICALL_ADDRESS_BY_CHAIN: Record<string, string> = {
@@ -8,10 +12,11 @@ export const MULTICALL_ADDRESS_BY_CHAIN: Record<string, string> = {
   polygon: process.env.MULTICALL_POLYGON ?? "",
   bsc: process.env.MULTICALL_BSC ?? "",
 };
+console.log("Using Multicall addresses:", MULTICALL_ADDRESS_BY_CHAIN);
 
 //basic validation at startup
 function validate() {
-  assert(RPC_URL, "RPC_URL is required in .env");
+  assert(RPC, "RPC is required in .env");
 
   const configuredChains = Object.entries(MULTICALL_ADDRESS_BY_CHAIN).filter(([, v]) => !!v).map(([k]) => k);
   if (configuredChains.length === 0) {
@@ -22,7 +27,7 @@ function validate() {
 validate();
 
 export default {
-  RPC_URL,
+  RPC,
   PAIR_CHUNK_SIZE,
   MULTICALL_ADDRESS_BY_CHAIN,
 };

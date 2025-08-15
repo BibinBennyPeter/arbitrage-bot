@@ -17,7 +17,7 @@ export function calculateArbitrage(reserves: ReserveWithFee[]): ArbitrageOpportu
 
       if (dexA === undefined || dexB === undefined) continue;
 
-      if (dexA.token0 !== dexB.token0 || dexA.token1 !== dexB.token1) continue;
+      if (dexA.token0 !== dexB.token0 || dexA.token1 !== dexB.token1 || dexA.token0 !== null || dexA.token1 !== null) continue;
 
       const r0A = Number(dexA.reserve0) / (10 ** (dexA.decimals0 || 18));
       const r1A = Number(dexA.reserve1) / (10 ** (dexA.decimals1 || 18));

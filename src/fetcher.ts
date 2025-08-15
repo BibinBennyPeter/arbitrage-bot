@@ -1,19 +1,14 @@
-import { Contract, Interface, JsonRpcProvider } from "ethers";
+import { Contract, getAddress, Interface, JsonRpcProvider } from "ethers";
 
 import FactoryAbi from "./abi/IUniswapV2Factory.json" with { type: "json" };
 import PairAbi from "./abi/IUniswapV2Pair.json" with { type: "json" };
 import ERC20Abi from "./abi/IERC20.json" with { type: "json" };
 
-import type { TokenPair, Reserve } from "./types/index.js";
-import { getMulticall, getProvider, getMulticallAddress } from "./utils/multicall.js";
+import type { TokenPair, Reserve, Multicall2Contract } from "./types/index.js";
+import { getMulticall, getProvider } from "./utils/multicall.js";
 import { keyFactory, pairAddrCache, decimalsCache } from "./utils/helper.js";
 
-type Multicall2Contract = Contract & {
-  tryAggregate: (
-    requireSuccess: boolean,
-    calls: { target: string; callData: string }[]
-  ) => Promise<[boolean, string][]>;
-};
+
 
 export async function fetchPairsAndReserves(
   chainId: number,
@@ -58,9 +53,20 @@ export async function fetchPairsAndReserves(
   return results;
 }
 
+  // helper: normalize & validate an address string; returns checksummed address or null
+  function safeAddr(maybeAddr: unknown): string | null {
+    if (typeof maybeAddr !== "string") return null;
+    try {
+      // getAddress accepts lower/upper and computes checksum; throws on invalid hex/length
+      return getAddress(maybeAddr);
+    } catch (err) {
+      return null;
+    }
+  }
+
 /**
- * Resolve pair addresses for each PairSpec using factory.getPair via Multicall.
- * Returns an array aligned with `pairs` where each element is a checksum address string or null.
+ * Safe resolvePairAddresses: normalizes addresses, handles missing/invalid addresses,
+ * and calls multicall via a runtime-safe path (tryAggregate -> callStatic.tryAggregate).
  */
 export async function resolvePairAddresses(
   factoryAddress: string,
@@ -68,30 +74,49 @@ export async function resolvePairAddresses(
   factoryIface: Interface,
   multicall: Multicall2Contract
 ): Promise<(string | null)[]> {
-  // 1) Prepare multicall payload
-  const calls = pairs.map((p) => ({
-    target: factoryAddress,
-    callData: factoryIface.encodeFunctionData("getPair", [p.token0, p.token1]),
-  }));
 
-  // 2) Execute multicall
-  const results = await multicall.tryAggregate(false, calls);
+  // Build multicall payload (addresses must be plain strings). If address invalid, substitute ZERO.
+  const ZERO = "0x0000000000000000000000000000000000000000";
+  const calls = pairs.map((p) => {
+    const a0 = safeAddr(p?.token0?.address) ?? ZERO;
+    const a1 = safeAddr(p?.token1?.address) ?? ZERO;
+    return {
+      target: factoryAddress,
+      callData: factoryIface.encodeFunctionData("getPair", [a0, a1]),
+    };
+  });
 
-  // 3) Decode results into addresses (or null) and cache
+  // Execute multicall: prefer multicall.tryAggregate (attached helper), otherwise callStatic.tryAggregate
+  let results: [boolean, string][] = [];
+  if (typeof (multicall as any).tryAggregate === "function") {
+    results = await (multicall as any).tryAggregate(false, calls);
+  } else if (multicall.callStatic && typeof multicall.callStatic.tryAggregate === "function") {
+    results = await multicall.callStatic.tryAggregate(false, calls);
+  } else {
+    throw new Error("Multicall contract does not expose tryAggregate or callStatic.tryAggregate");
+  }
+
+  // Decode results aligned with pairs
   const out: (string | null)[] = [];
   for (let i = 0; i < pairs.length; i++) {
     const r = results[i];
     let addr: string | null = null;
+
     if (r) {
       const [ok, data] = r;
       if (ok && data !== "0x") {
         try {
           const [decoded] = factoryIface.decodeFunctionResult("getPair", data);
-          if (decoded && decoded !== "0x0000000000000000000000000000000000000000") {
-            addr = decoded;
+          if (decoded && decoded !== ZERO) {
+            try {
+              // normalize returned pair address to checksummed form
+              addr = getAddress(decoded);
+            } catch (err) {
+              // decoded address invalid — keep addr = null
+              console.warn(`resolvePairAddresses: decoded pair not valid checksum at index ${i}`, err);
+            }
           }
         } catch (err) {
-          // non-fatal; leave addr = null
           console.warn(`resolvePairAddresses: decode error for index ${i}`, err);
         }
       }
@@ -99,8 +124,10 @@ export async function resolvePairAddresses(
       console.warn(`resolvePairAddresses: missing multicall result for index ${i}`);
     }
 
-    // cache result for faster subsequent lookupss
-    const cacheKey = keyFactory(factoryAddress, pairs[i]!.token0.symbol!, pairs[i]!.token1.symbol!);
+    // cache result using addresses (lowercased) — don't use symbols
+    const tok0Addr = safeAddr(pairs[i]?.token0?.address) ?? ZERO;
+    const tok1Addr = safeAddr(pairs[i]?.token1?.address) ?? ZERO;
+    const cacheKey = keyFactory(factoryAddress, tok0Addr.toLowerCase(), tok1Addr.toLowerCase());
     pairAddrCache.set(cacheKey, addr);
 
     out.push(addr);

@@ -1,3 +1,5 @@
+import type { Contract } from "ethers";
+
 export interface DexConfig {
   name: string;
   factory: string;
@@ -68,3 +70,15 @@ export type ArbitrageOpportunity = ReserveWithFee & {
   profit: number; // Profit from the arbitrage opportunity
 };
 
+export type Multicall2Contract = Contract & {
+  tryAggregate: (
+    requireSuccess: boolean,
+    calls: { target: string; callData: string }[]
+  ) => Promise<[boolean, string][]>;
+  callStatic: {
+    tryAggregate: (
+      requireSuccess: boolean,
+      calls: { target: string; callData: string }[]
+    ) => Promise<[boolean, string][]>;
+  };
+};
