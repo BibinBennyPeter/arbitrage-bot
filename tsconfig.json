@@ -38,6 +38,7 @@
     "jsx": "react-jsx",
     "verbatimModuleSyntax": true,
     "resolveJsonModule": true,
+    "esModuleInterop": true,
     "isolatedModules": true,
     "noUncheckedSideEffectImports": true,
     "moduleDetection": "force",

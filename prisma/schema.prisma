@@ -11,20 +11,17 @@ datasource db {
 }
 
 model Opportunity {
-  id                 Int      @id @default(autoincrement())
-  pair               String
-  token0             String
-  token1             String
-  dexBuy             String
-  dexSell            String
-  priceBuy           Float
-  priceSell          Float
-  amountIn           Float
-  grossProfit        Float
-  netProfit          Float
-  gasCost            Float
-  timestamp          DateTime @default(now())
-  reservesSnapshot   Json
-  simulationDetails  Json
-  safetyMarginPct    Float
+  id          Int      @id @default(autoincrement())
+  dex         String
+  chain       Int
+  pair        String
+  token0      String
+  token1      String
+  priceBuy    Float
+  priceSell   Float
+  profit      Float
+  reserve0    String
+  reserve1    String
+  fee         Float
+  timestamp   Int
 }
