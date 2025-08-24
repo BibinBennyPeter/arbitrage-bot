@@ -23,6 +23,7 @@ model Results {
   priceBuy  Float
   priceSell Float
   profit    Float
+  profitPercent Float
   reserve0  String
   reserve1  String
   fee       Float

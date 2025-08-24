@@ -12,7 +12,6 @@ export const MULTICALL_ADDRESS_BY_CHAIN: Record<string, string> = {
   polygon: process.env.MULTICALL_POLYGON ?? "",
   bsc: process.env.MULTICALL_BSC ?? "",
 };
-console.log("Using Multicall addresses:", MULTICALL_ADDRESS_BY_CHAIN);
 
 //basic validation at startup
 function validate() {

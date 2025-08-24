@@ -1,7 +1,6 @@
 import { Contract, JsonRpcProvider } from "ethers";
 import MulticallAbi from "../abi/MultiCall2.json" with { type: "json" };
-import { MULTICALL_ADDRESS_BY_CHAIN } from "../config/config.js";
-import { error } from "console";
+import { MULTICALL_ADDRESS_BY_CHAIN} from "../constants/multiContractAddresses.js";
 import type { Multicall2Contract } from "../types/index.js";
 
 // Ethereum (1) and Polygon (137).
@@ -15,20 +14,14 @@ const RPC_BY_CHAIN: Record<number, string> = {
 const MULTICALL_ADDRESS_BY_CHAIN_ID: Record<number, string> = {
   1: MULTICALL_ADDRESS_BY_CHAIN.ethereum!,
   137: MULTICALL_ADDRESS_BY_CHAIN.polygon!,
+  56: MULTICALL_ADDRESS_BY_CHAIN.bsc!,
 };
 
 export function getMulticall(chainId: number, provider: JsonRpcProvider): Multicall2Contract {
   const address = MULTICALL_ADDRESS_BY_CHAIN_ID[chainId];
-  if (!address) throw new Error(`No Multicall address configured for chainId=${chainId}`);
-  const contract = new Contract(address, MulticallAbi as any, provider) as Multicall2Contract;
 
-  // Attach runtime helper so callers can use contract.tryAggregate(...) directly.
-  if (!contract.tryAggregate) {
-    contract.tryAggregate = async (requireSuccess: boolean, calls: { target: string; callData: string }[]) => {
-      // Use callStatic to ensure no transaction is sent
-      return contract.callStatic.tryAggregate(requireSuccess, calls);
-    };
-  }
+  if (!address) throw new Error(`No Multicall address configured for chainId=${chainId}`);
+  const contract = new Contract(address, MulticallAbi, provider) as Multicall2Contract;
 
   return contract;
 }

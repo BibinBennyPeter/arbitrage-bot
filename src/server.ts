@@ -44,6 +44,7 @@ async function runFetcherJob() {
       );
       // Calculate arbitrage opportunities
       const results: ArbitrageOpportunity[] = calculateArbitrage(allReserves);
+      console.log( `ArbitrageOpportunities :`, results)
       if (results.length > 0) {
         const timestamp = Math.floor(Date.now() / 1000);
         await prisma.results.createMany({
@@ -70,7 +71,8 @@ async function runFetcherJob() {
     }
   }
 }
-
+// Initial run 
+runFetcherJob();
 setInterval(runFetcherJob, 30_000); // every 30 seconds
 
 app.get("/opportunities", async (_, res) => {

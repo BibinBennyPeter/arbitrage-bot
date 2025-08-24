@@ -68,17 +68,17 @@ export type ArbitrageOpportunity = ReserveWithFee & {
   priceBuy: number; // Price at which token1 is bought
   priceSell: number; // Price at which token0 is sold
   profit: number; // Profit from the arbitrage opportunity
+  profitPercent: number; // Profit percentage
 };
 
+
+type TryAggregate = (
+  requireSuccess: boolean,
+  calls: { target: string; callData: string }[]
+) => Promise<[boolean, string][]>;
+
 export type Multicall2Contract = Contract & {
-  tryAggregate: (
-    requireSuccess: boolean,
-    calls: { target: string; callData: string }[]
-  ) => Promise<[boolean, string][]>;
-  callStatic: {
-    tryAggregate: (
-      requireSuccess: boolean,
-      calls: { target: string; callData: string }[]
-    ) => Promise<[boolean, string][]>;
-  };
+  tryAggregate: TryAggregate & {
+    staticCall: TryAggregate;
+  }
 };

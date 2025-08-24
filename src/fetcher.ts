@@ -1,4 +1,4 @@
-import { Contract, getAddress, Interface, JsonRpcProvider } from "ethers";
+import { getAddress, Interface, JsonRpcProvider } from "ethers";
 
 import FactoryAbi from "./abi/IUniswapV2Factory.json" with { type: "json" };
 import PairAbi from "./abi/IUniswapV2Pair.json" with { type: "json" };
@@ -6,7 +6,7 @@ import ERC20Abi from "./abi/IERC20.json" with { type: "json" };
 
 import type { TokenPair, Reserve, Multicall2Contract } from "./types/index.js";
 import { getMulticall, getProvider } from "./utils/multicall.js";
-import { keyFactory, pairAddrCache, decimalsCache } from "./utils/helper.js";
+import { keyFactory, pairAddrCache, decimalsCache, sortTokens, safeAddr } from "./utils/helper.js";
 
 
 
@@ -18,6 +18,10 @@ export async function fetchPairsAndReserves(
 ): Promise<Reserve[]> {
   // Create provider and multicall for the chain.
   const provider = getProvider(chainId);
+
+  if (!provider) {
+    throw new Error(`No provider for chainId ${chainId}`);
+  }
   const multicall = getMulticall(chainId, provider) as Multicall2Contract;
 
   // Prepare ABI interfaces.
@@ -28,7 +32,6 @@ export async function fetchPairsAndReserves(
   //  Resolve pair addresses via Multicall (returns array aligned with `pairs`).
   const pairAddrs = await resolvePairAddresses(factoryAddress, pairs, factoryIface, multicall);
 
-  //  Fetch reserves for all existing pairs (returns array aligned to pairAddrs).
   const reserves = await fetchReserves(pairAddrs, pairIface, multicall, provider);
 
   //  Fetch token0/token1 for each pair (aligned arrays).
@@ -53,20 +56,9 @@ export async function fetchPairsAndReserves(
   return results;
 }
 
-  // helper: normalize & validate an address string; returns checksummed address or null
-  function safeAddr(maybeAddr: unknown): string | null {
-    if (typeof maybeAddr !== "string") return null;
-    try {
-      // getAddress accepts lower/upper and computes checksum; throws on invalid hex/length
-      return getAddress(maybeAddr);
-    } catch (err) {
-      return null;
-    }
-  }
-
 /**
  * Safe resolvePairAddresses: normalizes addresses, handles missing/invalid addresses,
- * and calls multicall via a runtime-safe path (tryAggregate -> callStatic.tryAggregate).
+ * and calls multicall via a runtime-safe path (tryAggregate -> tryAggregate.staticCall).
  */
 export async function resolvePairAddresses(
   factoryAddress: string,
@@ -80,20 +72,22 @@ export async function resolvePairAddresses(
   const calls = pairs.map((p) => {
     const a0 = safeAddr(p?.token0?.address) ?? ZERO;
     const a1 = safeAddr(p?.token1?.address) ?? ZERO;
+    const [tokA, tokB] = sortTokens(a0, a1);
     return {
       target: factoryAddress,
-      callData: factoryIface.encodeFunctionData("getPair", [a0, a1]),
+      callData: factoryIface.encodeFunctionData("getPair", [tokA, tokB]),
     };
   });
 
-  // Execute multicall: prefer multicall.tryAggregate (attached helper), otherwise callStatic.tryAggregate
+  // use multicall.callStatic to avoid sending transactions
   let results: [boolean, string][] = [];
-  if (typeof (multicall as any).tryAggregate === "function") {
-    results = await (multicall as any).tryAggregate(false, calls);
-  } else if (multicall.callStatic && typeof multicall.callStatic.tryAggregate === "function") {
-    results = await multicall.callStatic.tryAggregate(false, calls);
-  } else {
-    throw new Error("Multicall contract does not expose tryAggregate or callStatic.tryAggregate");
+  try {
+    results = await multicall.tryAggregate.staticCall(false, calls);
+
+
+  } catch (err) {
+    console.error("Failed to execute multicall:", err);
+    throw err;
   }
 
   // Decode results aligned with pairs
@@ -182,7 +176,7 @@ export async function fetchReserves(
   }
 
   // Execute multicall
-  const results = await multicall.tryAggregate(false, calls);
+  const results = await multicall.tryAggregate.staticCall(false, calls);
 
   // Prepare an output array aligned with pairAddrs
   const out = pairAddrs.map(() => null as null | {
@@ -261,8 +255,8 @@ export async function fetchPairTokens(
   }));
 
   const [t0Results, t1Results] = await Promise.all([
-    multicall.tryAggregate(false, token0Calls),
-    multicall.tryAggregate(false, token1Calls),
+    multicall.tryAggregate.staticCall(false, token0Calls),
+    multicall.tryAggregate.staticCall(false, token1Calls),
   ]);
 
   const out = pairAddrs.map(() => null as null | { token0: string; token1: string });
@@ -344,7 +338,7 @@ export async function fetchTokenDecimals(
   // execute multicall for decimals
   let results: [boolean, string][] = [];
   if (calls.length > 0) {
-    results = await multicall.tryAggregate(false, calls);
+    results = await multicall.tryAggregate.staticCall(false, calls);
   }
 
   // populate cache for queried tokens

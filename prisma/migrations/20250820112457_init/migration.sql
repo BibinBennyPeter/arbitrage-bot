@@ -9,6 +9,7 @@ CREATE TABLE "Results" (
     "priceBuy" REAL NOT NULL,
     "priceSell" REAL NOT NULL,
     "profit" REAL NOT NULL,
+    "profitPercent" REAL NOT NULL,
     "reserve0" TEXT NOT NULL,
     "reserve1" TEXT NOT NULL,
     "fee" REAL NOT NULL,
